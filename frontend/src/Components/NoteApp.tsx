@@ -1,14 +1,29 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, BookOpen } from 'lucide-react';
 
+
+interface Note {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+}
+
+interface WebSocketMessage {
+  type?: string;
+  event?: string;
+  notes?: Note[];
+  note?: Note;
+}
+
 // Main Note App component
-export default function NoteApp() {
-  const [notes, setNotes] = useState([]);
-  const [newNote, setNewNote] = useState('');
-  const [socket, setSocket] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [noteCount, setNoteCount] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+export default function NoteApp(): JSX.Element {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [newNote, setNewNote] = useState<string>('');
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [noteCount, setNoteCount] = useState<number>(0);
+  const [connectionStatus, setConnectionStatus] = useState<string>('Connecting...');
 
   // Connect to WebSocket server on component mount
   useEffect(() => {
@@ -22,9 +37,9 @@ export default function NoteApp() {
       fetchAllNotes();
     };
     
-    newSocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'notes_updated') {
+    newSocket.onmessage = (event: MessageEvent) => {
+      const data: WebSocketMessage = JSON.parse(event.data);
+      if (data.type === 'notes_updated' && data.notes) {
         setNotes(data.notes);
         setNoteCount(data.notes.length);
       }
@@ -41,7 +56,7 @@ export default function NoteApp() {
       }, 3000);
     };
     
-    newSocket.onerror = (error) => {
+    newSocket.onerror = (error: Event) => {
       console.error('WebSocket Error:', error);
       setConnectionStatus('Connection Error');
     };
@@ -54,11 +69,11 @@ export default function NoteApp() {
   }, []);
   
   // Fetch all notes from HTTP endpoint
-  const fetchAllNotes = async () => {
+  const fetchAllNotes = async (): Promise<void> => {
     try {
       // This should match your backend route
       const response = await fetch('http://localhost:8080/fetchAllTasks');
-      const data = await response.json();
+      const data: Note[] = await response.json();
       setNotes(data);
       setNoteCount(data.length);
     } catch (error) {
@@ -67,11 +82,11 @@ export default function NoteApp() {
   };
   
   // Add a new note via WebSocket
-  const addNote = (e) => {
+  const addNote = (e: React.FormEvent): void => {
     e.preventDefault();
     if (!newNote.trim() || !socket || socket.readyState !== WebSocket.OPEN) return;
     
-    const noteObject = {
+    const noteObject: Note = {
       id: Date.now().toString(),
       text: newNote,
       completed: false,
@@ -87,7 +102,7 @@ export default function NoteApp() {
   };
   
   // Delete a note
-  const deleteNote = (id) => {
+  const deleteNote = (id: string): void => {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     
     const updatedNotes = notes.filter(note => note.id !== id);
@@ -121,8 +136,8 @@ export default function NoteApp() {
             placeholder="New Note..."
             className="flex-grow px-3 py-2 border rounded-l focus:outline-none text-sm"
             value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addNote(e)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNote(e.target.value)}
+            onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && addNote(e)}
             disabled={!isConnected}
           />
           <button
@@ -147,7 +162,7 @@ export default function NoteApp() {
           </div>
           <div className="max-h-64 overflow-y-auto">
             {notes.length > 0 ? (
-              notes.map((note, index) => (
+              notes.map((note) => (
                 <div 
                   key={note.id} 
                   className="py-2 px-3 border-b border-gray-200 flex justify-between items-center group hover:bg-gray-50"
