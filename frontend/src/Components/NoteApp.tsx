@@ -8,14 +8,17 @@ export default function NoteApp() {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [noteCount, setNoteCount] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
 
   // Connect to WebSocket server on component mount
   useEffect(() => {
+    // Use the same port as your backend is running on
     const newSocket = new WebSocket('ws://localhost:8080');
     
     newSocket.onopen = () => {
       console.log('WebSocket Connected');
       setIsConnected(true);
+      setConnectionStatus('Connected');
       fetchAllNotes();
     };
     
@@ -30,6 +33,17 @@ export default function NoteApp() {
     newSocket.onclose = () => {
       console.log('WebSocket Disconnected');
       setIsConnected(false);
+      setConnectionStatus('Disconnected - Retrying...');
+      
+      // Try to reconnect after 3 seconds
+      setTimeout(() => {
+        setConnectionStatus('Reconnecting...');
+      }, 3000);
+    };
+    
+    newSocket.onerror = (error) => {
+      console.error('WebSocket Error:', error);
+      setConnectionStatus('Connection Error');
     };
     
     setSocket(newSocket);
@@ -42,7 +56,8 @@ export default function NoteApp() {
   // Fetch all notes from HTTP endpoint
   const fetchAllNotes = async () => {
     try {
-      const response = await fetch('http://localhost:3000/fetchAllTasks');
+      // This should match your backend route
+      const response = await fetch('http://localhost:8080/fetchAllTasks');
       const data = await response.json();
       setNotes(data);
       setNoteCount(data.length);
@@ -54,16 +69,18 @@ export default function NoteApp() {
   // Add a new note via WebSocket
   const addNote = (e) => {
     e.preventDefault();
-    if (!newNote.trim() || !socket) return;
+    if (!newNote.trim() || !socket || socket.readyState !== WebSocket.OPEN) return;
+    
+    const noteObject = {
+      id: Date.now().toString(),
+      text: newNote,
+      completed: false,
+      createdAt: new Date().toISOString()
+    };
     
     socket.send(JSON.stringify({
       event: 'add',
-      note: {
-        id: Date.now().toString(),
-        text: newNote,
-        completed: false,
-        createdAt: new Date().toISOString()
-      }
+      note: noteObject
     }));
     
     setNewNote('');
@@ -71,7 +88,7 @@ export default function NoteApp() {
   
   // Delete a note
   const deleteNote = (id) => {
-    if (!socket) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
     
     const updatedNotes = notes.filter(note => note.id !== id);
     
@@ -85,11 +102,16 @@ export default function NoteApp() {
     <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 flex items-center">
-          <div className="bg-orange-500 text-white p-1 rounded mr-2">
-            <BookOpen size={20} />
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="bg-orange-500 text-white p-1 rounded mr-2">
+              <BookOpen size={20} />
+            </div>
+            <h1 className="text-lg font-bold">Note App</h1>
           </div>
-          <h1 className="text-lg font-bold">Note App</h1>
+          <div className={`text-xs px-2 py-1 rounded ${isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            {connectionStatus}
+          </div>
         </div>
         
         {/* Add New Note Input */}
@@ -101,12 +123,14 @@ export default function NoteApp() {
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && addNote(e)}
+            disabled={!isConnected}
           />
           <button
             type="button"
             onClick={addNote}
-            className="bg-brown-600 hover:bg-brown-700 text-white px-3 py-2 rounded-r transition-colors"
-            style={{ backgroundColor: '#8B4513' }}
+            className={`text-white px-3 py-2 rounded-r transition-colors ${isConnected ? 'bg-brown-600 hover:bg-brown-700' : 'bg-gray-400'}`}
+            style={{ backgroundColor: isConnected ? '#8B4513' : undefined }}
+            disabled={!isConnected}
           >
             <span className="flex items-center">
               <Plus size={16} className="mr-1" />
@@ -117,17 +141,25 @@ export default function NoteApp() {
         
         {/* Notes List */}
         <div className="p-4">
-          <h2 className="text-sm font-semibold mb-2 text-gray-700">Notes</h2>
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-sm font-semibold text-gray-700">Notes</h2>
+            <span className="text-xs text-gray-500">{noteCount} total</span>
+          </div>
           <div className="max-h-64 overflow-y-auto">
             {notes.length > 0 ? (
               notes.map((note, index) => (
                 <div 
                   key={note.id} 
-                  className="py-2 px-1 border-b border-gray-200 flex justify-between items-center group"
+                  className="py-2 px-3 border-b border-gray-200 flex justify-between items-center group hover:bg-gray-50"
                 >
-                  <span className="text-sm text-gray-800">
-                    Note {index + 1}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-800">
+                      {note.text}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(note.createdAt).toLocaleString()}
+                    </span>
+                  </div>
                   <button 
                     onClick={() => deleteNote(note.id)}
                     className="text-gray-400 hover:text-red-600 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity"
